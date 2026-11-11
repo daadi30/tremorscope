@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#0b1220">
+<title>TremorScope: Smartphone Tremor Analyzer</title>
+<style>
+:root{--bg:#0b1220;--card:#121b2e;--line:#22304d;--txt:#e6ecf7;--mut:#8a99b8;--acc:#4fd1c5;--amb:#f6ad55;--red:#fc6d6d;--grn:#68d391;--blu:#63b3ed}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;background:var(--bg);color:var(--txt);font:15px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}
+body{padding:env(safe-area-inset-top) 0 calc(70px + env(safe-area-inset-bottom))}
+header{padding:14px 16px 6px;display:flex;align-items:center;gap:10px}
+header .logo{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--acc),var(--blu));display:grid;place-items:center;font-weight:800;color:#06202a}
+header h1{font-size:18px;margin:0}header small{color:var(--mut);display:block;font-size:12px}
+main{padding:0 12px;max-width:720px;margin:0 auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:14px;margin:10px 0}
+.card h2{font-size:14px;margin:0 0 8px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+button{font:inherit;border:0;border-radius:11px;padding:12px 16px;background:var(--line);color:var(--txt);font-weight:600}
+button.pri{background:var(--acc);color:#06202a}button:disabled{opacity:.4}
+.seg{display:flex;background:#0d1526;border:1px solid var(--line);border-radius:11px;padding:3px;width:100%}
+.seg button{flex:1;padding:9px 4px;background:none;font-size:13px;border-radius:8px}
+.seg button.on{background:var(--line);color:var(--acc)}
+canvas{width:100%;display:block;background:#0d1526;border-radius:10px}
+.cv-wave{height:120px}.cv-spec{height:190px}
+.big{font-size:44px;font-weight:800;text-align:center;font-variant-numeric:tabular-nums}
+.prog{height:6px;background:#0d1526;border-radius:3px;overflow:hidden;margin-top:8px}.prog i{display:block;height:100%;width:0;background:var(--acc);transition:width .2s linear}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.m{background:#0d1526;border-radius:10px;padding:10px}.m b{display:block;font-size:21px;font-variant-numeric:tabular-nums}.m span{color:var(--mut);font-size:12px}
+.verdict{border-radius:12px;padding:12px;margin-top:10px;border:1px solid}
+.verdict.ok{border-color:var(--grn);background:#68d39114}.verdict.warn{border-color:var(--amb);background:#f6ad5514}.verdict.alert{border-color:var(--red);background:#fc6d6d14}
+.verdict b{display:block;margin-bottom:4px}
+.note{color:var(--mut);font-size:13px}
+.pill{display:inline-block;font-size:11px;padding:2px 8px;border-radius:20px;background:var(--line);color:var(--mut)}
+.pill.live{background:#4fd1c522;color:var(--acc)}.pill.sim{background:#f6ad5522;color:var(--amb)}
+nav{position:fixed;left:0;right:0;bottom:0;background:#0b1220ee;backdrop-filter:blur(10px);border-top:1px solid var(--line);display:flex;padding:6px 6px calc(6px + env(safe-area-inset-bottom))}
+nav button{flex:1;background:none;font-size:12px;padding:8px 2px;color:var(--mut)}nav button.on{color:var(--acc)}
+nav svg{display:block;margin:0 auto 2px;width:22px;height:22px}
+section{display:none}section.on{display:block}
+#spiral{touch-action:none;aspect-ratio:1/1;height:auto}
+input[type=range]{width:100%;accent-color:var(--acc)}
+label{font-size:13px;color:var(--mut)}
+.sci p,.sci li{font-size:14px}.sci h3{font-size:15px;margin:14px 0 4px;color:var(--acc)}
+table{width:100%;border-collapse:collapse;font-size:13px}td,th{border-bottom:1px solid var(--line);padding:6px 4px;text-align:left}
+pre{white-space:pre-wrap;font-size:12px;background:#0d1526;padding:10px;border-radius:10px;max-height:260px;overflow:auto}
+</style>
+</head>
+<body>
+<header><div class="logo">T</div><div><h1>TremorScope</h1><small>Smartphone tremor analyzer · Parkinson's screening demo</small></div></header>
+<main>
+
+<!-- ============ TREMOR ============ -->
+<section id="tab-tremor" class="on">
+  <div class="card">
+    <h2>Sensor</h2>
+    <div class="row" style="justify-content:space-between">
+      <span id="sensorStatus" class="pill">Sensors off</span>
+      <div class="row">
+        <button id="btnEnable" class="pri">Enable motion sensors</button>
+        <button id="btnSim">Simulation</button>
+      </div>
+    </div>
+    <div id="simPanel" style="display:none;margin-top:10px">
+      <label>Simulated tremor frequency: <b id="simFv">5.0</b> Hz</label>
+      <input id="simF" type="range" min="2" max="14" step="0.1" value="5">
+      <label>Amplitude: <b id="simAv">0.60</b> m/s²</label>
+      <input id="simA" type="range" min="0" max="2" step="0.01" value="0.6">
+      <p class="note">Simulation feeds a synthetic signal through the same pipeline. Use it for projector demos or on laptops without motion sensors.</p>
+    </div>
+    <p id="sensorMsg" class="note" style="margin:8px 0 0"></p>
+  </div>
+
+  <div class="card">
+    <h2>Test</h2>
+    <div class="seg" id="modeSeg">
+      <button data-m="rest" class="on">Rest</button>
+      <button data-m="postural">Postural</button>
+      <button data-m="calibrate">Calibrate</button>
+    </div>
+    <p id="modeHelp" class="note"></p>
+    <div class="row" style="justify-content:space-between">
+      <div class="seg" id="handSeg" style="width:auto">
+        <button data-h="Right" class="on">Right hand</button><button data-h="Left">Left hand</button>
+      </div>
+      <button id="btnStart" class="pri" disabled>Start 10 s test</button>
+    </div>
+    <div id="countWrap" style="display:none"><div class="big" id="count">3</div><div class="prog"><i id="progBar"></i></div></div>
+  </div>
+
+  <div class="card">
+    <h2>Live signal <span class="pill">acceleration x · y · z</span></h2>
+    <canvas id="cvWave" class="cv-wave"></canvas>
+  </div>
+  <div class="card">
+    <h2>Frequency spectrum</h2>
+    <canvas id="cvSpec" class="cv-spec"></canvas>
+    <div class="note" style="margin-top:6px"><span style="color:var(--amb)">■</span> 3.5–6.5 Hz parkinsonian rest &nbsp; <span style="color:#ed8936">■</span> 6.5–8 Hz essential &nbsp; <span style="color:var(--blu)">■</span> 8–12 Hz physiological</div>
+  </div>
+
+  <div class="card" id="resultCard" style="display:none">
+    <h2>Result <span id="resTag" class="pill"></span></h2>
+    <div class="grid">
+      <div class="m"><b id="rF">–</b><span>Dominant frequency</span></div>
+      <div class="m"><b id="rA">–</b><span>Tremor amplitude (RMS, 3–15 Hz)</span></div>
+      <div class="m"><b id="rD">–</b><span>Est. hand displacement</span></div>
+      <div class="m"><b id="rR">–</b><span>Rhythmicity index</span></div>
+      <div class="m"><b id="rG">–</b><span>Gyroscope peak (cross-check)</span></div>
+      <div class="m"><b id="rS">–</b><span>Sampling rate</span></div>
+    </div>
+    <div id="verdict" class="verdict ok"></div>
+  </div>
+</section>
+
+<!-- ============ SPIRAL ============ -->
+<section id="tab-spiral">
+  <div class="card">
+    <h2>Archimedes spiral test</h2>
+    <p class="note" style="margin-top:0">Trace the dotted spiral with one finger, starting at the centre and going outward, without lifting. Rest your wrist off the screen. It analyses when you lift your finger.</p>
+    <canvas id="spiral"></canvas>
+    <div class="row" style="margin-top:10px;justify-content:space-between">
+      <div class="seg" id="sHandSeg" style="width:auto"><button data-h="Right" class="on">Right</button><button data-h="Left">Left</button></div>
+      <button id="btnClear">Clear</button>
+    </div>
+  </div>
+  <div class="card" id="spiralRes" style="display:none">
+    <h2>Spiral analysis</h2>
+    <div class="grid">
+      <div class="m"><b id="sGrade">–</b><span>Tremor grade (0–4)</span></div>
+      <div class="m"><b id="sHp">–</b><span>Tremor wobble (% loop spacing)</span></div>
+      <div class="m"><b id="sF">–</b><span>Wobble frequency</span></div>
+      <div class="m"><b id="sDev">–</b><span>Overall deviation</span></div>
+      <div class="m"><b id="sT">–</b><span>Duration</span></div>
+      <div class="m"><b id="sTurns">–</b><span>Turns traced</span></div>
+    </div>
+    <div id="sVerdict" class="verdict ok"></div>
+    <p class="note">Colour on the trace shows local wobble: green is smooth, red is tremulous.</p>
+  </div>
+</section>
+
+<!-- ============ REPORT ============ -->
+<section id="tab-report">
+  <div class="card">
+    <h2>Screening report</h2>
+    <div id="reportBody" class="note">Run a test to populate the report.</div>
+    <div class="row" style="margin-top:10px">
+      <button id="btnCopy" class="pri">Copy report</button>
+      <button id="btnCsv">Download raw CSV</button>
+      <button id="btnReset">Clear history</button>
+    </div>
+    <p id="copyMsg" class="note"></p>
+  </div>
+  <div class="card">
+    <h2>History (this device)</h2>
+    <div id="history" class="note">No saved tests yet.</div>
+  </div>
+</section>
+
+<!-- ============ SCIENCE ============ -->
+<section id="tab-sci">
+  <div class="card sci">
+    <h2>How it works</h2>
+    <h3>1. Sensing</h3>
+    <p>The phone's MEMS accelerometer (linear acceleration, m/s², gravity removed) and gyroscope (rotation rate, °/s) are read at about 60 Hz through the browser's DeviceMotion API. By Nyquist, 60 Hz sampling captures tremors up to 30 Hz, well above the 3–12 Hz band of interest.</p>
+    <h3>2. Pre-processing</h3>
+    <ul><li>Resample to a uniform 50 Hz (browser timestamps jitter).</li><li>Remove the mean, then apply a zero-phase 2nd-order Butterworth high-pass at 0.5 Hz to remove drift and gravity residue, plus a low-pass at 18 Hz.</li></ul>
+    <h3>3. Spectral analysis</h3>
+    <p>Welch's method: 256-sample Hann-windowed segments, 50% overlap, zero-padded 2048-point FFT. The power spectra of the x, y and z axes are summed so the result is independent of phone orientation. The peak in 3–15 Hz is refined by parabolic interpolation.</p>
+    <h3>4. Features</h3>
+    <table>
+      <tr><th>Feature</th><th>Meaning</th></tr>
+      <tr><td>Dominant frequency</td><td>Main tremor oscillator rate</td></tr>
+      <tr><td>RMS amplitude</td><td>√(band power 3–15 Hz), tremor intensity</td></tr>
+      <tr><td>Displacement</td><td>x ≈ a·√2 / (2πf)²</td></tr>
+      <tr><td>Rhythmicity</td><td>Power within ±0.75 Hz of peak ÷ band power. A true tremor is above 0.5; voluntary motion is below 0.25.</td></tr>
+    </table>
+    <h3>5. Clinical interpretation</h3>
+    <table>
+      <tr><th>Tremor</th><th>Frequency</th><th>Condition</th></tr>
+      <tr><td>Rest</td><td>4–6 Hz</td><td>Parkinson's disease</td></tr>
+      <tr><td>Postural / kinetic</td><td>4–12 Hz (often 6–8)</td><td>Essential tremor</td></tr>
+      <tr><td>Postural, low amplitude</td><td>8–12 Hz</td><td>Physiological (normal)</td></tr>
+      <tr><td>Postural, higher amplitude</td><td>8–12 Hz</td><td>Enhanced physiological (caffeine, anxiety, thyroid)</td></tr>
+    </table>
+    <p>Key discriminator: Parkinson's tremor is strongest <b>at rest</b> and dampens with posture, while essential tremor <b>worsens with posture</b>. The report compares both.</p>
+    <h3>6. Spiral analysis</h3>
+    <p>Touch points are converted to polar coordinates (r, θ) around the spiral centre, θ is unwrapped, and an ideal Archimedean spiral r = a + bθ is fitted by least squares. Residuals are high-pass filtered (±200 ms moving-mean subtraction) to isolate tremor wobble from slow drawing error, then normalised to the loop spacing (2πb) and spectrally analysed. The grade is a heuristic 0–4 scale inspired by the Bain–Findley clinical spiral rating.</p>
+    <h3>Limitations</h3>
+    <ul><li>Screening and education tool only. Not a medical device and not diagnostic.</li><li>Amplitude thresholds are heuristic and uncalibrated across phone models.</li><li>Frequency bands overlap between conditions; clinical context matters.</li><li>Phone mass slightly damps tremor; a grip that varies between tests adds variance.</li></ul>
+  </div>
+</section>
+</main>
+
+<nav>
+  <button data-t="tremor" class="on"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M2 12h4l2-6 4 12 3-9 2 3h5"/></svg>Tremor</button>
+  <button data-t="spiral"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 12a1 1 0 1 1 1 1 3 3 0 1 1-3-3 5 5 0 1 1 5 5 7 7 0 1 1-7-7"/></svg>Spiral</button>
+  <button data-t="report"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2h9l5 5v15H6z"/><path d="M9 13h8M9 17h6"/></svg>Report</button>
+  <button data-t="sci"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7.5v.5"/></svg>Science</button>
+</nav>
+
+<script>
+// ===== DSP core =====
+const DSP = (() => {
+  function fft(re, im) {
+    const n = re.length;
+    for (let i = 1, j = 0; i < n; i++) {
+      let bit = n >> 1;
+      for (; j & bit; bit >>= 1) j ^= bit;
+      j ^= bit;
+      if (i < j) { [re[i], re[j]] = [re[j], re[i]]; [im[i], im[j]] = [im[j], im[i]]; }
+    }
+    for (let len = 2; len <= n; len <<= 1) {
+      const ang = -2 * Math.PI / len, wr = Math.cos(ang), wi = Math.sin(ang);
+      for (let i = 0; i < n; i += len) {
+        let cr = 1, ci = 0;
+        for (let k = 0; k < len / 2; k++) {
+          const a = i + k, b = a + len / 2;
+          const tr = re[b] * cr - im[b] * ci, ti = re[b] * ci + im[b] * cr;
+          re[b] = re[a] - tr; im[b] = im[a] - ti; re[a] += tr; im[a] += ti;
+          const nr = cr * wr - ci * wi; ci = cr * wi + ci * wr; cr = nr;
+        }
+      }
+    }
+  }
+  const pow2floor = n => 1 << Math.floor(Math.log2(n));
+
+  function biquad(type, f0, fs, Q = Math.SQRT1_2) {
+    const w = 2 * Math.PI * f0 / fs, c = Math.cos(w), al = Math.sin(w) / (2 * Q);
+    let b0, b1, b2;
+    if (type === 'hp') { b0 = (1 + c) / 2; b1 = -(1 + c); b2 = (1 + c) / 2; }
+    else { b0 = (1 - c) / 2; b1 = 1 - c; b2 = (1 - c) / 2; }
+    const a0 = 1 + al;
+    return { b0: b0 / a0, b1: b1 / a0, b2: b2 / a0, a1: -2 * c / a0, a2: (1 - al) / a0 };
+  }
+  function runBiquad(x, k) {
+    const y = new Float64Array(x.length);
+    let x1 = x[0], x2 = x[0], y1, y2;
+    // steady-state init
+    const dc = (k.b0 + k.b1 + k.b2) / (1 + k.a1 + k.a2);
+    y1 = y2 = x[0] * dc;
+    for (let i = 0; i < x.length; i++) {
+      const v = k.b0 * x[i] + k.b1 * x1 + k.b2 * x2 - k.a1 * y1 - k.a2 * y2;
+      x2 = x1; x1 = x[i]; y2 = y1; y1 = v; y[i] = v;
+    }
+    return y;
+  }
+  // zero-phase forward-backward filter with reflection padding
+  function filtfilt(x, k) {
+    const n = x.length, p = Math.min(n - 1, 60);
+    const ext = new Float64Array(n + 2 * p);
+    for (let i = 0; i < p; i++) ext[i] = 2 * x[0] - x[p - i];
+    for (let i = 0; i < n; i++) ext[p + i] = x[i];
+    for (let i = 0; i < p; i++) ext[p + n + i] = 2 * x[n - 1] - x[n - 2 - i];
+    let y = runBiquad(ext, k); y.reverse(); y = runBiquad(y, k); y.reverse();
+    return y.slice(p, p + n);
+  }
+  function mean(a) { let s = 0; for (const v of a) s += v; return s / a.length; }
+
+  // uniform resampling of {t(ms), ...} records
+  function resample(samples, key, fs) {
+    const t0 = samples[0].t, T = samples[samples.length - 1].t - t0;
+    const N = Math.floor(T / 1000 * fs);
+    const out = new Float64Array(N);
+    let j = 0;
+    for (let i = 0; i < N; i++) {
+      const ti = t0 + i * 1000 / fs;
+      while (j < samples.length - 2 && samples[j + 1].t < ti) j++;
+      const a = samples[j], b = samples[j + 1];
+      const dt = b.t - a.t, u = dt > 0 ? (ti - a.t) / dt : 0;
+      out[i] = a[key] + (b[key] - a[key]) * Math.min(1, Math.max(0, u));
+    }
+    return out;
+  }
+
+  // Welch PSD, one-sided, scaled so sum(P)*df = variance
+  function welch(x, fs, nseg = 256, nfft = 2048) {
+    if (x.length < nseg) nseg = pow2floor(x.length);
+    nfft = Math.max(nfft, nseg);
+    const w = new Float64Array(nseg); let S2 = 0;
+    for (let i = 0; i < nseg; i++) { w[i] = 0.5 - 0.5 * Math.cos(2 * Math.PI * i / (nseg - 1)); S2 += w[i] * w[i]; }
+    const acc = new Float64Array(nfft / 2 + 1); let count = 0;
+    const step = nseg / 2;
+    for (let s = 0; s + nseg <= x.length; s += step) {
+      const re = new Float64Array(nfft), im = new Float64Array(nfft);
+      let m = 0; for (let i = 0; i < nseg; i++) m += x[s + i]; m /= nseg;
+      for (let i = 0; i < nseg; i++) re[i] = (x[s + i] - m) * w[i];
+      fft(re, im);
+      for (let k = 0; k <= nfft / 2; k++) acc[k] += re[k] * re[k] + im[k] * im[k];
+      count++;
+    }
+    const P = new Float64Array(nfft / 2 + 1), f = new Float64Array(nfft / 2 + 1);
+    for (let k = 0; k <= nfft / 2; k++) {
+      P[k] = acc[k] / (count * fs * S2) * (k > 0 && k < nfft / 2 ? 2 : 1);
+      f[k] = k * fs / nfft;
+    }
+    return { f, P, df: fs / nfft };
+  }
+  function bandPower(sp, lo, hi) {
+    let s = 0; for (let k = 0; k < sp.f.length; k++) if (sp.f[k] >= lo && sp.f[k] <= hi) s += sp.P[k];
+    return s * sp.df;
+  }
+  function peak(sp, lo, hi) {
+    let bi = -1, bv = -1;
+    for (let k = 1; k < sp.f.length - 1; k++) if (sp.f[k] >= lo && sp.f[k] <= hi && sp.P[k] > bv) { bv = sp.P[k]; bi = k; }
+    if (bi < 1) return { f: NaN, p: 0 };
+    const a = sp.P[bi - 1], b = sp.P[bi], c = sp.P[bi + 1];
+    const d = (a - 2 * b + c) !== 0 ? 0.5 * (a - c) / (a - 2 * b + c) : 0;
+    return { f: sp.f[bi] + d * sp.df, p: b };
+  }
+  function sumSpectra(list) {
+    const f = list[0].f, P = new Float64Array(f.length);
+    for (const s of list) for (let k = 0; k < f.length; k++) P[k] += s.P[k];
+    return { f, P, df: list[0].df };
+  }
+
+  // Full multi-axis spectrum for a key set
+  function axisSpectrum(samples, keys, fs, hiCut) {
+    const specs = keys.map(key => {
+      let x = resample(samples, key, fs);
+      const m = mean(x); x = x.map(v => v - m);
+      x = filtfilt(x, biquad('hp', 0.5, fs));
+      if (hiCut < fs * 0.45) x = filtfilt(x, biquad('lp', hiCut, fs));
+      return welch(x, fs, Math.min(256, pow2floor(x.length)), 2048);
+    });
+    return sumSpectra(specs);
+  }
+
+  function analyzeMotion(samples) {
+    if (samples.length < 30) return null;
+    const T = (samples[samples.length - 1].t - samples[0].t) / 1000;
+    if (T < 2.5) return null;
+    const fsActual = (samples.length - 1) / T;
+    const fs = fsActual >= 45 ? 50 : Math.max(20, Math.round(fsActual));
+    const hi = Math.min(15, fs / 2 * 0.9);
+    const acc = axisSpectrum(samples, ['ax', 'ay', 'az'], fs, hi + 3);
+    const hasGyro = samples.some(s => s.gx || s.gy || s.gz);
+    const gyr = hasGyro ? axisSpectrum(samples, ['gx', 'gy', 'gz'], fs, hi + 3) : null;
+    const pk = peak(acc, 3, hi);
+    const band = bandPower(acc, 3, hi);
+    const low = bandPower(acc, 0.5, 2.5);
+    const near = bandPower(acc, pk.f - 0.75, pk.f + 0.75);
+    const rms = Math.sqrt(band);
+    const gpk = gyr ? peak(gyr, 3, hi) : null;
+    const gRms = gyr ? Math.sqrt(bandPower(gyr, 3, hi)) : null;
+    const dispMm = isFinite(pk.f) ? (rms * Math.SQRT2) / Math.pow(2 * Math.PI * pk.f, 2) * 1000 : NaN;
+    return {
+      T, fsActual, fs, hi, spectrum: acc, gyroSpectrum: gyr,
+      peakF: pk.f, rms, lowRms: Math.sqrt(low), rhythm: band > 0 ? near / band : 0,
+      gyroPeakF: gpk ? gpk.f : null, gyroRms: gRms, dispMm, n: samples.length
+    };
+  }
+
+  function classify(mode, r, noiseThr) {
+    const thr = Math.max(0.04, noiseThr || 0);
+    const out = { level: 'ok', title: '', detail: '' };
+    if (r.lowRms > 0.35 && r.lowRms > 3 * r.rms) {
+      out.warn = 'Large slow movements detected (<2.5 Hz). Brace your forearm and repeat for a cleaner reading.';
+    }
+    if (r.rms < thr) {
+      out.title = 'No tremor above the noise floor';
+      out.detail = `Tremor-band amplitude ${r.rms.toFixed(3)} m/s² is below the detection threshold (${thr.toFixed(3)} m/s²). This is consistent with normal physiological tremor.`;
+      return out;
+    }
+    if (r.rhythm < 0.25) {
+      out.level = 'warn';
+      out.title = 'Irregular, non-rhythmic movement';
+      out.detail = 'Energy is spread across frequencies rather than at a single peak, which suggests voluntary movement or handling noise, not a true tremor. Repeat while holding still.';
+      return out;
+    }
+    const f = r.peakF, sev = r.rms < 0.3 ? 'mild' : r.rms < 1.5 ? 'moderate' : 'marked';
+    if (f >= 8) {
+      if (r.rms < 0.3) { out.title = 'Physiological tremor (normal)'; out.detail = `Rhythmic ${f.toFixed(1)} Hz tremor at low amplitude, which is typical of the normal 8–12 Hz physiological tremor everyone has.`; }
+      else { out.level = 'warn'; out.title = 'Enhanced physiological tremor'; out.detail = `${f.toFixed(1)} Hz tremor with ${sev} amplitude. Common causes are caffeine, anxiety, fatigue, low blood sugar, thyroid issues or medication.`; }
+      return out;
+    }
+    if (mode === 'rest') {
+      if (f < 6.5) { out.level = 'alert'; out.title = 'Rest tremor in the parkinsonian range'; out.detail = `Rhythmic ${f.toFixed(1)} Hz tremor at rest (${sev}). A 4–6 Hz rest tremor is the classic Parkinson's disease pattern. Screening only: refer for neurological evaluation.`; }
+      else { out.level = 'warn'; out.title = 'Rest tremor, 6.5–8 Hz'; out.detail = `Rhythmic ${f.toFixed(1)} Hz tremor at rest (${sev}). This is above the typical parkinsonian band; it overlaps the essential-tremor range.`; }
+    } else {
+      out.level = 'alert'; out.title = 'Pathological-range postural tremor';
+      out.detail = `Rhythmic ${f.toFixed(1)} Hz tremor with arms outstretched (${sev}). Postural tremor at 4–8 Hz is typical of essential tremor; it can also be re-emergent tremor in Parkinson's. Compare with the rest test.`;
+    }
+    return out;
+  }
+
+  // ---- spiral ----
+  function analyzeSpiral(pts, cx, cy) {
+    const P = pts.map(p => ({ ...p, r: Math.hypot(p.x - cx, p.y - cy), a: Math.atan2(p.y - cy, p.x - cx) })).filter(p => p.r > 8);
+    if (P.length < 40) return { error: 'Trace more of the spiral (start at the centre, keep your finger down).' };
+    let th = P[0].a; P[0].th = th;
+    for (let i = 1; i < P.length; i++) {
+      let d = P[i].a - P[i - 1].a;
+      while (d > Math.PI) d -= 2 * Math.PI; while (d < -Math.PI) d += 2 * Math.PI;
+      th += d; P[i].th = th;
+    }
+    const span = Math.abs(P[P.length - 1].th - P[0].th);
+    if (span < 3 * Math.PI) return { error: 'Trace at least 1.5 turns of the spiral.' };
+    // linear fit r = a + b*th
+    const n = P.length; let sx = 0, sy = 0, sxx = 0, sxy = 0;
+    for (const p of P) { sx += p.th; sy += p.r; sxx += p.th * p.th; sxy += p.th * p.r; }
+    const b = (n * sxy - sx * sy) / (n * sxx - sx * sx), a = (sy - b * sx) / n;
+    const spacing = Math.abs(b) * 2 * Math.PI;
+    for (const p of P) p.res = p.r - (a + b * p.th);
+    // local high-pass: subtract ±200 ms moving mean
+    let lo = 0, hi = 0, s = 0;
+    for (let i = 0; i < n; i++) {
+      while (hi < n && P[hi].t <= P[i].t + 200) { s += P[hi].res; hi++; }
+      while (P[lo].t < P[i].t - 200) { s -= P[lo].res; lo++; }
+      P[i].hp = P[i].res - s / (hi - lo);
+    }
+    const rmsOf = k => Math.sqrt(P.reduce((q, p) => q + p[k] * p[k], 0) / n);
+    const hpPct = rmsOf('hp') / spacing * 100, devPct = rmsOf('res') / spacing * 100;
+    const dur = (P[n - 1].t - P[0].t) / 1000;
+    let freq = NaN, rhythm = 0;
+    if (dur > 1.5) {
+      const fs = 60;
+      let x = resample(P, 'res', fs);
+      x = filtfilt(x, biquad('hp', 2, fs));
+      const sp = welch(x, fs, Math.min(128, pow2floor(x.length)), 1024);
+      const pk = peak(sp, 3, 12), band = bandPower(sp, 3, 12);
+      rhythm = band > 0 ? bandPower(sp, pk.f - 0.75, pk.f + 0.75) / band : 0;
+      freq = pk.f;
+    }
+    const grade = hpPct < 3 ? 0 : hpPct < 5 ? 1 : hpPct < 9 ? 2 : hpPct < 15 ? 3 : 4;
+    return { P, a, b, spacing, hpPct, devPct, dur, turns: span / (2 * Math.PI), freq, rhythm, grade };
+  }
+
+  return { fft, welch, biquad, filtfilt, resample, analyzeMotion, classify, analyzeSpiral, bandPower, peak };
+})();
+if (typeof module !== 'undefined') module.exports = DSP;
+
+</script>
+<script>
+(() => {
+const $ = id => document.getElementById(id);
+const S = { mode: 'rest', hand: 'Right', sHand: 'Right', source: null, live: [], rec: null, last: {}, lastRaw: null,
+  noise: 0, spiral: null, history: [] };
+try { S.noise = +localStorage.getItem('ts_noise') || 0; S.history = JSON.parse(localStorage.getItem('ts_hist') || '[]'); } catch (e) {}
+const save = () => { try { localStorage.setItem('ts_noise', S.noise); localStorage.setItem('ts_hist', JSON.stringify(S.history.slice(-20))); } catch (e) {} };
+
+// ---------- canvas helpers ----------
+function fit(c) { const r = devicePixelRatio || 1, w = c.clientWidth, h = c.clientHeight; if (!w) return null;
+  if (c.width !== Math.round(w * r) || c.height !== Math.round(h * r)) { c.width = Math.round(w * r); c.height = Math.round(h * r); }
+  const g = c.getContext('2d'); g.setTransform(r, 0, 0, r, 0, 0); return { g, w, h }; }
+
+// ---------- tabs ----------
+document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
+  document.querySelectorAll('nav button').forEach(x => x.classList.toggle('on', x === b));
+  document.querySelectorAll('section').forEach(s => s.classList.toggle('on', s.id === 'tab-' + b.dataset.t));
+  if (b.dataset.t === 'spiral') drawSpiral(); if (b.dataset.t === 'report') renderReport(); window.scrollTo(0, 0);
+});
+function segBind(id, key, cb) { const el = $(id); el.querySelectorAll('button').forEach(b => b.onclick = () => {
+  el.querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b)); S[key] = b.dataset.m || b.dataset.h; cb && cb(); }); }
+const HELP = {
+  rest: 'Sit with your forearm resting on your thigh or a table, hand relaxed and hanging over the edge, holding the phone loosely. Stay still and relaxed. Counting backwards from 100 helps bring out a rest tremor.',
+  postural: 'Hold the phone in your palm with your arm stretched straight out in front, at shoulder height. Keep the position steady for 10 s.',
+  calibrate: 'Place the phone flat on a table and don\'t touch it. This measures the sensor noise floor so readings near zero aren\'t mistaken for tremor.'
+};
+segBind('modeSeg', 'mode', () => { $('modeHelp').textContent = HELP[S.mode]; $('btnStart').textContent = S.mode === 'calibrate' ? 'Start 5 s calibration' : 'Start 10 s test'; });
+segBind('handSeg', 'hand'); segBind('sHandSeg', 'sHand');
+$('modeHelp').textContent = HELP.rest;
+
+// ---------- sensors ----------
+function onSample(s) {
+  S.live.push(s); const cut = s.t - 5000; while (S.live.length && S.live[0].t < cut) S.live.shift();
+  if (S.rec && S.rec.phase === 'rec') S.rec.samples.push(s);
+}
+let gotMotion = false;
+function motionHandler(e) {
+  const a = e.acceleration && e.acceleration.x != null ? e.acceleration : e.accelerationIncludingGravity;
+  if (!a || a.x == null) return;
+  gotMotion = true;
+  if (S.source !== 'live') return;
+  const r = e.rotationRate || {};
+  onSample({ t: performance.now(), ax: a.x || 0, ay: a.y || 0, az: a.z || 0, gx: r.alpha || 0, gy: r.beta || 0, gz: r.gamma || 0 });
+}
+function setStatus(txt, cls) { const p = $('sensorStatus'); p.textContent = txt; p.className = 'pill ' + (cls || ''); }
+$('btnEnable').onclick = async () => {
+  stopSim();
+  if (!window.isSecureContext) { $('sensorMsg').textContent = 'Motion sensors need a secure (https://) page. Open the hosted link, not a local file.'; return; }
+  if (typeof DeviceMotionEvent === 'undefined') { $('sensorMsg').textContent = 'This browser has no motion-sensor support. Use Simulation.'; return; }
+  try {
+    if (typeof DeviceMotionEvent.requestPermission === 'function') {
+      const st = await DeviceMotionEvent.requestPermission();
+      if (st !== 'granted') { $('sensorMsg').textContent = 'Permission denied. On iPhone, close the tab, reopen the page and tap Allow. If it still fails: Settings → Apps → Safari → Advanced → Website Data, clear this site, then try again.'; return; }
+    }
+  } catch (err) { $('sensorMsg').textContent = 'Permission request failed: ' + err.message; return; }
+  window.addEventListener('devicemotion', motionHandler);
+  S.source = 'live'; S.live = []; gotMotion = false;
+  setStatus('Waiting for sensor…');
+  setTimeout(() => {
+    if (gotMotion) { setStatus('Live sensors', 'live'); $('sensorMsg').textContent = ''; $('btnStart').disabled = false; }
+    else { setStatus('No sensor data'); $('sensorMsg').textContent = 'No motion data received. This device may have no accelerometer (laptop?). Use Simulation instead.'; }
+  }, 1500);
+};
+// simulation
+let simTimer = null, simT0 = 0;
+const gauss = () => Math.sqrt(-2 * Math.log(Math.random() + 1e-12)) * Math.cos(2 * Math.PI * Math.random());
+function stopSim() { if (simTimer) clearInterval(simTimer); simTimer = null; $('simPanel').style.display = 'none'; }
+$('btnSim').onclick = () => {
+  if (simTimer) { stopSim(); S.source = null; setStatus('Sensors off'); $('btnStart').disabled = true; return; }
+  window.removeEventListener('devicemotion', motionHandler);
+  S.source = 'sim'; S.live = []; simT0 = performance.now(); $('simPanel').style.display = 'block';
+  setStatus('Simulation', 'sim'); $('btnStart').disabled = false; $('sensorMsg').textContent = '';
+  simTimer = setInterval(() => {
+    const t = performance.now(), ts = (t - simT0) / 1000, f = +$('simF').value, A = +$('simA').value;
+    const v = A * (Math.sin(2 * Math.PI * f * ts) + 0.15 * Math.sin(4 * Math.PI * f * ts + 1));
+    const drift = 0.15 * Math.sin(2 * Math.PI * 0.25 * ts), n = () => 0.012 * gauss();
+    const w = 2 * Math.PI * f, gscale = A / w * 57.3 * 6;
+    onSample({ t, ax: 0.8 * v + drift + n(), ay: 0.5 * v + n(), az: 0.3 * v + n(),
+      gx: gscale * Math.cos(w * ts) + 0.3 * gauss(), gy: 0.5 * gscale * Math.cos(w * ts) + 0.3 * gauss(), gz: 0.3 * gauss() });
+  }, 1000 / 60);
+};
+$('simF').oninput = e => $('simFv').textContent = (+e.target.value).toFixed(1);
+$('simA').oninput = e => $('simAv').textContent = (+e.target.value).toFixed(2);
+
+// ---------- recording ----------
+$('btnStart').onclick = () => {
+  if (S.rec) return;
+  const dur = S.mode === 'calibrate' ? 5 : 10;
+  S.rec = { phase: 'count', samples: [], mode: S.mode, hand: S.hand, dur, source: S.source };
+  $('btnStart').disabled = true; $('countWrap').style.display = 'block'; $('progBar').style.width = '0';
+  let c = 3; $('count').textContent = c;
+  if (navigator.vibrate) navigator.vibrate(30);
+  const iv = setInterval(() => {
+    c--; if (c > 0) { $('count').textContent = c; return; }
+    clearInterval(iv); S.rec.phase = 'rec'; S.rec.t0 = performance.now();
+    if (navigator.vibrate) navigator.vibrate(80);
+    const tick = setInterval(() => {
+      const el = (performance.now() - S.rec.t0) / 1000;
+      $('count').textContent = Math.max(0, dur - el).toFixed(1) + ' s'; $('progBar').style.width = Math.min(100, el / dur * 100) + '%';
+      if (el >= dur) { clearInterval(tick); finish(); }
+    }, 100);
+  }, 1000);
+};
+function finish() {
+  const rec = S.rec; S.rec = null; $('countWrap').style.display = 'none'; $('btnStart').disabled = !S.source;
+  if (navigator.vibrate) navigator.vibrate([60, 60, 60]);
+  const r = DSP.analyzeMotion(rec.samples);
+  if (!r) { $('sensorMsg').textContent = 'Not enough data was captured. Keep the page in the foreground and try again.'; return; }
+  S.lastRaw = rec;
+  if (rec.mode === 'calibrate') {
+    S.noise = Math.max(0.01, r.rms * 3); save();
+    showResult(rec, r, { level: 'ok', title: 'Calibration saved', detail: `Sensor noise floor ${r.rms.toFixed(4)} m/s² RMS. The detection threshold is set to ${Math.max(0.04, S.noise).toFixed(3)} m/s².` });
+    return;
+  }
+  const v = DSP.classify(rec.mode, r, S.noise);
+  showResult(rec, r, v);
+  const entry = { when: new Date().toISOString(), type: 'tremor', mode: rec.mode, hand: rec.hand, sim: rec.source === 'sim',
+    f: r.peakF, rms: r.rms, disp: r.dispMm, rhythm: r.rhythm, title: v.title, level: v.level };
+  S.last[rec.mode] = entry; S.history.push(entry); save();
+}
+function showResult(rec, r, v) {
+  $('resultCard').style.display = 'block';
+  $('resTag').textContent = `${rec.mode} · ${rec.hand}${rec.source === 'sim' ? ' · SIMULATED' : ''}`;
+  $('rF').textContent = isFinite(r.peakF) ? r.peakF.toFixed(2) + ' Hz' : '–';
+  $('rA').textContent = r.rms.toFixed(3) + ' m/s²';
+  $('rD').textContent = isFinite(r.dispMm) ? (r.dispMm < 0.1 ? r.dispMm.toFixed(3) : r.dispMm.toFixed(2)) + ' mm' : '–';
+  $('rR').textContent = r.rhythm.toFixed(2);
+  $('rG').textContent = r.gyroPeakF ? r.gyroPeakF.toFixed(2) + ' Hz' : 'n/a';
+  $('rS').textContent = r.fsActual.toFixed(0) + ' Hz';
+  const el = $('verdict'); el.className = 'verdict ' + v.level;
+  el.innerHTML = `<b>${v.title}</b>${v.detail}${v.warn ? `<div style="margin-top:6px;color:var(--amb)">⚠ ${v.warn}</div>` : ''}<div class="note" style="margin-top:6px">Screening demo, not a diagnosis.</div>`;
+  S.frozen = { spectrum: r.spectrum, peakF: r.peakF };
+  drawSpectrum(r.spectrum, r.peakF);
+  setTimeout(() => $('resultCard').scrollIntoView({ behavior: 'smooth', block: 'start' }), 100);
+}
+
+// ---------- live plots ----------
+function drawWave() {
+  const o = fit($('cvWave')); if (!o) return; const { g, w, h } = o;
+  g.clearRect(0, 0, w, h);
+  g.strokeStyle = '#22304d'; g.lineWidth = 1; g.beginPath(); g.moveTo(0, h / 2); g.lineTo(w, h / 2); g.stroke();
+  const L = S.live; if (L.length < 5) { g.fillStyle = '#8a99b8'; g.font = '12px sans-serif'; g.fillText('Enable sensors or Simulation to see the live signal', 10, h / 2 - 8); return; }
+  const tEnd = L[L.length - 1].t, span = 4000;
+  const cols = { ax: '#4fd1c5', ay: '#63b3ed', az: '#b794f4' };
+  let maxA = 0.2;
+  const ema = {}; const series = { ax: [], ay: [], az: [] };
+  for (const k of ['ax', 'ay', 'az']) { ema[k] = L[0][k]; }
+  for (const s of L) for (const k of ['ax', 'ay', 'az']) { ema[k] += 0.04 * (s[k] - ema[k]); const d = s[k] - ema[k]; series[k].push(d); if (s.t > tEnd - span) maxA = Math.max(maxA, Math.abs(d)); }
+  for (const k of ['ax', 'ay', 'az']) {
+    g.strokeStyle = cols[k]; g.lineWidth = 1.4; g.beginPath(); let st = false;
+    L.forEach((s, i) => { if (s.t < tEnd - span) return; const x = (s.t - (tEnd - span)) / span * w, y = h / 2 - series[k][i] / maxA * (h / 2 - 6);
+      st ? g.lineTo(x, y) : (g.moveTo(x, y), st = true); });
+    g.stroke();
+  }
+  g.fillStyle = '#8a99b8'; g.font = '11px sans-serif'; g.fillText('±' + maxA.toFixed(2) + ' m/s²', 6, 13);
+  if (S.rec && S.rec.phase === 'rec') { g.fillStyle = '#fc6d6d'; g.beginPath(); g.arc(w - 12, 12, 5, 0, 7); g.fill(); }
+}
+function drawSpectrum(sp, pkF) {
+  const o = fit($('cvSpec')); if (!o) return; const { g, w, h } = o;
+  g.clearRect(0, 0, w, h);
+  const padL = 8, padB = 20, fMax = 15, X = f => padL + f / fMax * (w - padL - 8), plotH = h - padB - 6;
+  [[3.5, 6.5, '#f6ad5522'], [6.5, 8, '#ed893622'], [8, 12, '#63b3ed1f']].forEach(([a, b, c]) => { g.fillStyle = c; g.fillRect(X(a), 6, X(b) - X(a), plotH); });
+  g.fillStyle = '#8a99b8'; g.font = '11px sans-serif'; g.strokeStyle = '#22304d';
+  for (let f = 0; f <= 15; f += 3) { g.beginPath(); g.moveTo(X(f), 6); g.lineTo(X(f), 6 + plotH); g.stroke(); g.fillText(f + (f === 15 ? ' Hz' : ''), X(f) - (f === 15 ? 22 : 3), h - 5); }
+  if (!sp) { g.fillText('Spectrum appears during and after a test', 14, h / 2); return; }
+  let mx = 1e-9; for (let k = 0; k < sp.f.length; k++) if (sp.f[k] > 1.5 && sp.f[k] <= fMax) mx = Math.max(mx, sp.P[k]);
+  g.beginPath(); g.moveTo(X(0), 6 + plotH);
+  for (let k = 0; k < sp.f.length && sp.f[k] <= fMax; k++) g.lineTo(X(sp.f[k]), 6 + plotH - Math.min(1, sp.P[k] / mx) * plotH);
+  g.lineTo(X(Math.min(fMax, sp.f[sp.f.length - 1])), 6 + plotH); g.closePath();
+  const gr = g.createLinearGradient(0, 6, 0, 6 + plotH); gr.addColorStop(0, '#4fd1c5aa'); gr.addColorStop(1, '#4fd1c510');
+  g.fillStyle = gr; g.fill(); g.strokeStyle = '#4fd1c5'; g.lineWidth = 1.6; g.stroke();
+  if (isFinite(pkF)) { g.strokeStyle = '#fff'; g.setLineDash([4, 3]); g.beginPath(); g.moveTo(X(pkF), 6); g.lineTo(X(pkF), 6 + plotH); g.stroke(); g.setLineDash([]);
+    g.fillStyle = '#fff'; g.font = 'bold 12px sans-serif'; const lbl = pkF.toFixed(1) + ' Hz'; g.fillText(lbl, Math.min(X(pkF) + 4, w - 50), 20); }
+}
+let lastSpec = 0;
+function loop(ts) {
+  if ($('tab-tremor').classList.contains('on')) {
+    drawWave();
+    if (ts - lastSpec > 500) { lastSpec = ts;
+      const src = S.rec && S.rec.phase === 'rec' ? S.rec.samples : (S.frozen ? null : S.live);
+      if (src && src.length > 60) { const r = DSP.analyzeMotion(src.slice(-300)); if (r) drawSpectrum(r.spectrum, r.rms > Math.max(0.04, S.noise) ? r.peakF : NaN); }
+      else if (S.frozen) drawSpectrum(S.frozen.spectrum, S.frozen.peakF); else drawSpectrum(null);
+    }
+  }
+  requestAnimationFrame(loop);
+}
+requestAnimationFrame(loop);
+// unfreeze spectrum when a new test starts
+const _start = $('btnStart').onclick; $('btnStart').onclick = () => { S.frozen = null; _start(); };
+
+// ---------- spiral ----------
+const sc = $('spiral'); let drawing = false, pts = [];
+function guide() { const w = sc.clientWidth; return { cx: w / 2, cy: w / 2, maxR: w * 0.44, turns: 3 }; }
+function drawSpiral(analysis) {
+  const o = fit(sc); if (!o) return; const { g, w } = o; const G = guide();
+  g.clearRect(0, 0, w, w);
+  const b = G.maxR / (G.turns * 2 * Math.PI);
+  g.strokeStyle = '#3a4a6b'; g.lineWidth = 2; g.setLineDash([3, 6]); g.beginPath();
+  for (let th = 0; th <= G.turns * 2 * Math.PI; th += 0.05) { const r = b * th; const x = G.cx + r * Math.cos(th), y = G.cy + r * Math.sin(th); th ? g.lineTo(x, y) : g.moveTo(x, y); }
+  g.stroke(); g.setLineDash([]);
+  g.fillStyle = '#4fd1c5'; g.beginPath(); g.arc(G.cx, G.cy, 5, 0, 7); g.fill();
+  g.font = '11px sans-serif'; g.fillStyle = '#8a99b8'; g.fillText('start', G.cx + 8, G.cy - 6);
+  if (analysis && analysis.P) {
+    const P = analysis.P;
+    for (let i = 1; i < P.length; i++) {
+      const u = Math.min(1, Math.abs(P[i].hp) / (analysis.spacing * 0.08));
+      g.strokeStyle = `hsl(${120 - 120 * u},75%,58%)`; g.lineWidth = 3; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(P[i - 1].x, P[i - 1].y); g.lineTo(P[i].x, P[i].y); g.stroke();
+    }
+  } else if (pts.length) {
+    g.strokeStyle = '#e6ecf7'; g.lineWidth = 3; g.lineCap = 'round'; g.lineJoin = 'round'; g.beginPath();
+    pts.forEach((p, i) => i ? g.lineTo(p.x, p.y) : g.moveTo(p.x, p.y)); g.stroke();
+  }
+}
+function addPt(e) { const r = sc.getBoundingClientRect();
+  const list = e.getCoalescedEvents ? e.getCoalescedEvents() : [e];
+  for (const ev of (list.length ? list : [e])) pts.push({ x: ev.clientX - r.left, y: ev.clientY - r.top, t: ev.timeStamp || performance.now() }); }
+sc.addEventListener('pointerdown', e => { e.preventDefault(); sc.setPointerCapture(e.pointerId); drawing = true; pts = []; addPt(e); drawSpiral(); });
+sc.addEventListener('pointermove', e => { if (!drawing) return; e.preventDefault(); addPt(e); drawSpiral(); });
+const endDraw = e => { if (!drawing) return; drawing = false; analyzeSp(); };
+sc.addEventListener('pointerup', endDraw); sc.addEventListener('pointercancel', endDraw);
+sc.addEventListener('touchmove', e => e.preventDefault(), { passive: false });
+$('btnClear').onclick = () => { pts = []; S.spiral = null; $('spiralRes').style.display = 'none'; drawSpiral(); };
+const GRADE = ['Normal: no visible tremor', 'Slight tremor', 'Mild tremor', 'Moderate tremor', 'Severe tremor'];
+function analyzeSp() {
+  const G = guide(); const a = DSP.analyzeSpiral(pts, G.cx, G.cy);
+  $('spiralRes').style.display = 'block';
+  if (a.error) { $('sVerdict').className = 'verdict warn'; $('sVerdict').innerHTML = `<b>Incomplete trace</b>${a.error}`; drawSpiral(); return; }
+  drawSpiral(a); S.spiral = { ...a, hand: S.sHand };
+  $('sGrade').textContent = a.grade; $('sHp').textContent = a.hpPct.toFixed(1) + '%';
+  const rhythmic = a.rhythm > 0.35 && a.hpPct >= 3;
+  $('sF').textContent = rhythmic && isFinite(a.freq) ? a.freq.toFixed(1) + ' Hz' : 'none';
+  $('sDev').textContent = a.devPct.toFixed(1) + '%'; $('sT').textContent = a.dur.toFixed(1) + ' s'; $('sTurns').textContent = a.turns.toFixed(1);
+  const lvl = a.grade <= 1 ? 'ok' : a.grade === 2 ? 'warn' : 'alert';
+  $('sVerdict').className = 'verdict ' + lvl;
+  $('sVerdict').innerHTML = `<b>Grade ${a.grade}: ${GRADE[a.grade]}</b>` +
+    (rhythmic ? `A rhythmic wobble at about ${a.freq.toFixed(1)} Hz was detected in the line. ` : 'No rhythmic oscillation detected in the line. ') +
+    (a.dur < 4 ? 'You drew quickly; slower tracing (8–15 s) reveals tremor better.' : '') +
+    `<div class="note" style="margin-top:6px">Heuristic scale, uncalibrated. Screening demo only.</div>`;
+  const entry = { when: new Date().toISOString(), type: 'spiral', hand: S.sHand, grade: a.grade, hp: a.hpPct, f: rhythmic ? a.freq : null, dur: a.dur };
+  S.last.spiral = entry; S.history.push(entry); save();
+}
+window.addEventListener('resize', () => { if ($('tab-spiral').classList.contains('on')) drawSpiral(S.spiral); });
+
+// ---------- report ----------
+function reportText() {
+  const L = S.last, lines = ['TremorScope screening report', new Date().toLocaleString(), ''];
+  const fm = e => `${e.hand} hand${e.sim ? ' [SIMULATED]' : ''}: ${isFinite(e.f) ? e.f.toFixed(2) : '–'} Hz, ${e.rms.toFixed(3)} m/s² RMS, ~${isFinite(e.disp) ? e.disp.toFixed(2) : '–'} mm, rhythmicity ${e.rhythm.toFixed(2)}. ${e.title}`;
+  if (L.rest) lines.push('REST TEST: ' + fm(L.rest));
+  if (L.postural) lines.push('POSTURAL TEST: ' + fm(L.postural));
+  if (L.rest && L.postural) {
+    const ratio = L.rest.rms / Math.max(1e-6, L.postural.rms);
+    lines.push('', `Rest/postural amplitude ratio: ${ratio.toFixed(2)}`,
+      ratio > 1.3 ? 'Tremor is stronger at rest and reduces with posture, a pattern more typical of Parkinson\'s disease.'
+      : ratio < 0.77 ? 'Tremor is stronger with posture than at rest, a pattern more typical of essential or physiological tremor.'
+      : 'Similar amplitude at rest and posture; not discriminative.');
+  }
+  if (L.spiral) lines.push('', `SPIRAL (${L.spiral.hand}): grade ${L.spiral.grade}/4 (${GRADE[L.spiral.grade]}), wobble ${L.spiral.hp.toFixed(1)}% of loop spacing${L.spiral.f ? ', ~' + L.spiral.f.toFixed(1) + ' Hz' : ''}, ${L.spiral.dur.toFixed(1)} s.`);
+  lines.push('', 'Noise threshold: ' + Math.max(0.04, S.noise).toFixed(3) + ' m/s²' + (S.noise ? ' (calibrated)' : ' (default)'),
+    'Disclaimer: educational screening prototype, not a medical device. Abnormal results warrant clinical neurological evaluation.');
+  return lines.join('\n');
+}
+function renderReport() {
+  const has = S.last.rest || S.last.postural || S.last.spiral;
+  $('reportBody').innerHTML = has ? `<pre>${reportText()}</pre>` : 'Run a test to populate the report.';
+  $('history').innerHTML = S.history.length ? '<table><tr><th>Time</th><th>Test</th><th>Result</th></tr>' +
+    S.history.slice(-20).reverse().map(e => `<tr><td>${new Date(e.when).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</td><td>${e.type === 'spiral' ? 'Spiral' : e.mode}${e.sim ? '*' : ''} · ${e.hand[0]}</td><td>${e.type === 'spiral' ? 'Grade ' + e.grade : (isFinite(e.f) ? e.f.toFixed(1) : '–') + ' Hz · ' + e.rms.toFixed(2)}</td></tr>`).join('') + '</table><p class="note">* simulated</p>' : 'No saved tests yet.';
+}
+$('btnCopy').onclick = async () => { try { await navigator.clipboard.writeText(reportText()); $('copyMsg').textContent = 'Copied.'; } catch (e) { $('copyMsg').textContent = 'Copy blocked: long-press the report text to copy.'; } };
+$('btnCsv').onclick = () => {
+  const r = S.lastRaw; if (!r) { $('copyMsg').textContent = 'Run a tremor test first.'; return; }
+  const t0 = r.samples[0].t;
+  const csv = 't_ms,ax,ay,az,gx,gy,gz\n' + r.samples.map(s => [(s.t - t0).toFixed(1), s.ax, s.ay, s.az, s.gx, s.gy, s.gz].map(v => typeof v === 'number' ? +(+v).toFixed(5) : v).join(',')).join('\n');
+  const a = document.createElement('a'); a.href = URL.createObjectURL(new Blob([csv], { type: 'text/csv' }));
+  a.download = `tremor_${r.mode}_${r.hand}_${Date.now()}.csv`; document.body.appendChild(a); a.click(); a.remove();
+};
+$('btnReset').onclick = () => { S.history = []; S.last = {}; save(); renderReport(); };
+drawSpectrum(null);
+})();
+</script>
+</body>
+</html>
